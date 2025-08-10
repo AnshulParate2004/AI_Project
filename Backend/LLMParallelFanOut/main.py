@@ -78,3 +78,4 @@ async def run_full_pipeline(request: QuestionRequest):
         "input_question": request.question,
         "final_answer": optimized_data
     }
+    
