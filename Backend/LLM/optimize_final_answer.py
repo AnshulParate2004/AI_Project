@@ -11,7 +11,7 @@ BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
 HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
 MODEL_NAME = "llama3-70b-8192"
-JSON_PATH = r"C:\Users\KAIZEN\Desktop\AI_Project\Backend\LLMParallelFanOut\multillm_results.json"
+JSON_PATH = r"C:\Users\KAIZEN\Desktop\AI_Project\Backend\LLM\multillm_results.json"
 OUTPUT_PATH = "optimized_llm_final_answers.json"
 
 def synthesize_final_answer(question, all_answers):

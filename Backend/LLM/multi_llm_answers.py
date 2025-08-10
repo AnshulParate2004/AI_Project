@@ -116,7 +116,7 @@ def ask_all_models_for_question(question, models):
 
 # === Main ===
 if __name__ == "__main__":
-    input_file = r"C:\Users\KAIZEN\Desktop\AI_Project\Backend\LLMParallelFanOut\questions.json"
+    input_file = r"C:\Users\KAIZEN\Desktop\AI_Project\Backend\LLM\questions.json"
     try:
         with open(input_file, "r", encoding="utf-8") as f:
             variants = json.load(f)
