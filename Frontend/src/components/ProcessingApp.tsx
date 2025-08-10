@@ -13,16 +13,37 @@ export const ProcessingApp = () => {
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
-    
+
     setState('processing');
-    
-    // Simulate background processing
-    setTimeout(() => {
-      // Mock processing result
-      const processedOutput = `Processed result: ${input.toUpperCase()} - Analysis complete with enhanced formatting and additional insights.`;
-      setOutput(processedOutput);
+    setOutput('');
+
+    try {
+      const response = await fetch('http://localhost:8000/full_pipeline', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question: input }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Format output nicely (stringify if it's an object)
+      const formattedOutput =
+        typeof data.final_answer === 'string'
+          ? data.final_answer
+          : JSON.stringify(data.final_answer, null, 2);
+
+      setOutput(formattedOutput);
       setState('complete');
-    }, 3000);
+    } catch (error: any) {
+      setOutput(`Error: ${error.message || 'Something went wrong'}`);
+      setState('complete');
+    }
   };
 
   const handleReset = () => {
@@ -53,7 +74,7 @@ export const ProcessingApp = () => {
               Enter your text and let our AI work its magic
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent className="space-y-6">
             {state === 'input' && (
               <div className="space-y-4 animate-fade-in">
@@ -69,8 +90,8 @@ export const ProcessingApp = () => {
                     className="min-h-[120px] border-border/50 focus:border-primary/50 focus:ring-primary/20"
                   />
                 </div>
-                
-                <Button 
+
+                <Button
                   onClick={handleSubmit}
                   disabled={!input.trim()}
                   className="w-full bg-gradient-primary hover:shadow-glow transition-all duration-300 text-primary-foreground"
@@ -108,25 +129,21 @@ export const ProcessingApp = () => {
                   <CheckCircle className="h-8 w-8 mr-2" />
                   <span className="text-lg font-semibold">Processing Complete!</span>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Processed Output
                   </label>
                   <div className="bg-accent/30 border border-accent rounded-lg p-4 min-h-[120px]">
-                    <p className="text-accent-foreground whitespace-pre-wrap">{output}</p>
+                    <pre className="text-accent-foreground whitespace-pre-wrap">{output}</pre>
                   </div>
                 </div>
 
                 <div className="flex gap-3">
-                  <Button 
-                    onClick={handleReset}
-                    variant="outline"
-                    className="flex-1"
-                  >
+                  <Button onClick={handleReset} variant="outline" className="flex-1">
                     Process New Input
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => navigator.clipboard.writeText(output)}
                     className="bg-gradient-primary hover:shadow-glow transition-all duration-300"
                   >
