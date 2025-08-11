@@ -1,18 +1,21 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 import json
 import os
 
+from sqlalchemy.orm import Session
+from db import get_db, engine
+from models import Base, PipelineResult
+
+# Create tables if not exist
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI()
 
-# Allow your React app to access this API
-origins = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",  # Adjust if your React dev server uses different port
-]
-
+# Allow React
+origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -21,26 +24,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Path to Python inside your venv
 PYTHON_EXE = r"C:\Users\KAIZEN\Desktop\AI_Project\Backend\.venv\Scripts\python.exe"
-
-# Base folder for all LLM scripts and data
 LLM_DIR = os.path.join(os.path.dirname(__file__), "LLM")
 
 class QuestionRequest(BaseModel):
     question: str
 
 def run_script(script_name, *args):
-    """
-    Runs a Python script from the LLM folder with optional arguments.
-    """
     script_path = os.path.join(LLM_DIR, script_name)
-
     if not os.path.exists(script_path):
         raise RuntimeError(f"Script not found: {script_path}")
 
     env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"  # Force UTF-8 output from subprocess
+    env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         result = subprocess.run(
@@ -48,47 +44,50 @@ def run_script(script_name, *args):
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8',
+            encoding="utf-8",
             env=env,
-            cwd=LLM_DIR  # Ensure working directory is LLM folder
+            cwd=LLM_DIR
         )
         return result.stdout
-
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr or e.stdout or str(e)
         raise RuntimeError(f"Failed to run {script_name}: {error_msg}")
 
 @app.post("/full_pipeline")
-async def run_full_pipeline(request: QuestionRequest):
-    # 1. Run question_variants.py with the question argument
+async def run_full_pipeline(request: QuestionRequest, db: Session = Depends(get_db)):
+    # Run pipeline scripts
     try:
         run_script("question_variants.py", request.question)
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # 2. Run multi_llm_answers.py
-    try:
         run_script("multi_llm_answers.py")
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # 3. Run optimize_final_answer.py
-    try:
         run_script("optimize_final_answer.py")
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 4. Load and return final optimized answer
+    # Load result JSON
     optimized_file = os.path.join(LLM_DIR, "optimized_llm_final_answers.json")
     try:
         with open(optimized_file, "r", encoding="utf-8") as f:
             optimized_data = json.load(f)
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail=f"{optimized_file} not found")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"{optimized_file} contains invalid JSON")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=500, detail=f"Error reading {optimized_file}: {e}")
 
+    # Save to DB
+    new_result = PipelineResult(
+        input_question=request.question,  # <-- keep original user question here
+        original_question = optimized_data["original"]["question"],
+        original_optimized_final = optimized_data["original"]["optimized_final"],
+        abstract_question = optimized_data["abstract"]["question"],
+        abstract_optimized_final = optimized_data["abstract"]["optimized_final"],
+        detailed_question = optimized_data["detailed"]["question"],
+        detailed_optimized_final = optimized_data["detailed"]["optimized_final"]
+    )
+    db.add(new_result)
+    db.commit()
+    db.refresh(new_result)
+    
     return {
+        "status": "success",
+        "id": new_result.id,
         "input_question": request.question,
         "final_answer": optimized_data
     }
